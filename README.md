@@ -62,9 +62,9 @@ To demonstrate competitive engineering skills within enterprise environments, th
    npm run dev
    ```
 
-## 🔧 Project Link
+## 🌐 Project Link
 
-You can view the live project here: 👉 
+You can view the live project here: 👉 barber-shop-app-kappa.vercel.app
 
 
 
