@@ -14,7 +14,7 @@ export default function Login() {
     width: '100%',
     padding: '8px',
     marginTop: '5px',
-    boxSizing: 'border-box' // <-- Fixes right padding overflow
+    boxSizing: 'border-box' // Fixes right padding overflow
   }
 
   const validatePassword = (pass) => {
@@ -22,7 +22,7 @@ export default function Login() {
     const hasUpper = /[A-Z]/.test(pass);
     const hasLower = /[a-z]/.test(pass);
     const hasNumber = /[0-9]/.test(pass);
-    const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(pass);
+    const hasSymbol = /[!@#\$%^&*(),.?":{}|<>]/.test(pass);
 
     return minLength && hasUpper && hasLower && hasNumber && hasSymbol;
   }
@@ -41,7 +41,7 @@ export default function Login() {
 
     try {
       if (isRegistering) {
-        // 1. Sign up user in Supabase Auth
+        // 1. Register the user profile securely in Supabase Auth backend
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email,
           password,
@@ -49,7 +49,7 @@ export default function Login() {
 
         if (authError) throw authError
 
-        // 2. Insert profile record into PostgreSQL
+        // 2. Structural sync block: Persist the relational row entry inside the PostgreSQL database space
         if (authData?.user) {
           const assignedRole = email.includes('admin') ? 'barber' : 'client'
 
@@ -63,11 +63,18 @@ export default function Login() {
               }
             ])
 
-          if (profileError) throw profileError
-          alert('Account successfully created!')
+          if (profileError) {
+            throw new Error(`Profile synchronization blocked: ${profileError.message}`);
+          }
+          
+          alert('Account successfully created! Please sign in with your credentials.');
+          setIsRegistering(false); // Clean routing switch over to regular Login mode
+          setFullName('');
+          setEmail('');
+          setPassword('');
         }
       } else {
-        // 3. Sign in with Supabase Auth
+        // 3. Authenticate active state validation session
         const { error: loginError } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -76,7 +83,7 @@ export default function Login() {
         if (loginError) throw loginError
       }
     } catch (error) {
-      console.error('Authentication error:', error.message)
+      console.error('Authentication process failure:', error.message)
       setErrorMessage(error.message || 'An unexpected error occurred.')
     } finally {
       setLoading(false)
@@ -110,7 +117,7 @@ export default function Login() {
           
           {isRegistering && (
             <small style={{ color: '#666', display: 'block', marginTop: '4px', fontSize: '11px' }}>
-              Requirements: Min. 8 characters, case-sensitive (A/a), numbers (0-9), and symbols (!@#$).
+              Requirements: Min. 8 characters, case-sensitive (A/a), numbers (0-9), and symbols (!@#\$).
             </small>
           )}
         </div>
@@ -124,6 +131,5 @@ export default function Login() {
     </div>
   )
 }
-
 
 
