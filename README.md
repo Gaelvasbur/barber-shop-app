@@ -64,7 +64,7 @@ To demonstrate competitive engineering skills within enterprise environments, th
 
 ## 🌐 Project Link
 
-You can view the live project here: 👉 barber-shop-app-kappa.vercel.app
+You can view the live project here: 👉 https://barber-shop-app-kappa.vercel.app/
 
 
 
