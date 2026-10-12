@@ -54,16 +54,16 @@ export default function ClientView({ session }) {
 
     try {
       const { error } = await supabase
-        .from('appointments')
-        .insert([
-          {
-            client_id: session.user.id,
-            barber_id: parseInt(selectedBarber),
-            appointment_date: date,
-            appointment_time: time,
-            status: 'pending'
-          }
-        ])
+      .from('appointments')
+      .insert([
+        {
+          client_id: session.user.id,
+          barber_id: Number(selectedBarber), 
+          appointment_date: date,
+          appointment_time: time,
+          status: 'pending'
+        }
+      ])
 
       if (error) throw error
 
