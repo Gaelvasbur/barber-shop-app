@@ -123,7 +123,7 @@ export default function ClientView({ session }) {
 
 
   return (
-    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', position: 'relative' }}>
+    <div style={{ maxWidth: '650px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', position: 'relative', boxSizing: 'border-box' }}>
       <button 
         onClick={async () => await supabase.auth.signOut()} 
         style={{ position: 'absolute', top: '10px', right: '10px', backgroundColor: '#f44336', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
@@ -139,7 +139,7 @@ export default function ClientView({ session }) {
       <form onSubmit={handleReserve}>
         <div style={{ marginBottom: '15px' }}>
           <label>Select Your Barber:</label>
-          <select value={selectedBarber} onChange={(e) => setSelectedBarber(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px' }}>
+          <select value={selectedBarber} onChange={(e) => setSelectedBarber(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}>
             <option value="">-- Select a professional --</option>
             {barbers.map((b) => (
               <option key={b.id} value={b.id}>{b.name} - {b.specialty}</option>
@@ -148,7 +148,7 @@ export default function ClientView({ session }) {
         </div>
         <div style={{ marginBottom: '15px' }}>
           <label>Date:</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px' }} />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }} />
         </div>
         <div style={{ marginBottom: '15px' }}>
           <label>Time:</label>
@@ -159,29 +159,41 @@ export default function ClientView({ session }) {
             onChange={(e) => setTime(e.target.value)} 
             required 
             step="3600" 
-            style={{ width: '100%', padding: '8px', marginTop: '5px' }} 
+            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }} 
           />
         </div>
-        <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '10px', backgroundColor: isSubmitting ? '#ccc' : '#222', color: 'white', border: 'none', borderRadius: '4px', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+        <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '10px', backgroundColor: isSubmitting ? '#ccc' : '#222', color: 'white', border: 'none', borderRadius: '4px', cursor: isSubmitting ? 'not-allowed' : 'pointer', boxSizing: 'border-box' }}>
           {isSubmitting ? 'Checking availability...' : 'Confirm Booking'}
         </button>
       </form>
 
-      {/* --- NEW SECTION: MY APPOINTMENTS HISTORY --- */}
+      {/* --- REFINED SECTION: MY APPOINTMENTS HISTORY CONTAINER --- */}
       <h3 style={{ marginTop: '40px', borderTop: '1px solid #eee', paddingTop: '20px' }}>My Bookings</h3>
-      <ul style={{ paddingLeft: '0', listStyle: 'none' }}>
+      <ul style={{ paddingLeft: '0', marginRight: '0', listStyle: 'none', width: '100%' }}>
         {myAppointments.length === 0 ? (
           <li style={{ color: '#777', fontStyle: 'italic' }}>No appointments registered yet.</li>
         ) : (
           myAppointments.map((appt) => (
-            <li key={appt.id} style={{ padding: '10px', borderBottom: '1px solid #f1f1f1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+            <li 
+              key={appt.id} 
+              style={{ 
+                padding: '12px 10px', 
+                borderBottom: '1px solid #f1f1f1', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                boxSizing: 'border-box',
+                width: '100%'
+              }}
+            >
+              <div style={{ paddingRight: '15px' }}>
                 <strong>{appt.barbers?.name || 'Barber'}</strong> - {appt.appointment_date} ({appt.appointment_time})
               </div>
               <span style={{
-                padding: '3px 6px',
+                padding: '4px 8px',
                 borderRadius: '4px',
                 fontSize: '12px',
+                whiteSpace: 'nowrap',
                 backgroundColor: appt.status === 'pending' ? '#fff3cd' : appt.status === 'completed' ? '#d1e7dd' : '#f8d7da',
                 color: appt.status === 'pending' ? '#856404' : appt.status === 'completed' ? '#0f5132' : '#842029'
               }}>
