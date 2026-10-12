@@ -11,6 +11,15 @@ export default function ClientView({ session }) {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
 
+  // Normalized input style to ensure identity size across select, date, and time elements
+  const centralizedInputStyle = {
+    width: '100%',
+    padding: '8px',
+    marginTop: '5px',
+    boxSizing: 'border-box', // Forces identical width rendering across different tags
+    display: 'block' // Eliminates structural differences in rendering inline blocks
+  }
+
   // Function to load barbers and appointments for this specific client
   const fetchData = async () => {
     try {
@@ -121,7 +130,6 @@ export default function ClientView({ session }) {
     }
   }
 
-
   return (
     <div style={{ maxWidth: '650px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', position: 'relative', boxSizing: 'border-box' }}>
       <button 
@@ -139,7 +147,7 @@ export default function ClientView({ session }) {
       <form onSubmit={handleReserve}>
         <div style={{ marginBottom: '15px' }}>
           <label>Select Your Barber:</label>
-          <select value={selectedBarber} onChange={(e) => setSelectedBarber(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}>
+          <select value={selectedBarber} onChange={(e) => setSelectedBarber(e.target.value)} required style={centralizedInputStyle}>
             <option value="">-- Select a professional --</option>
             {barbers.map((b) => (
               <option key={b.id} value={b.id}>{b.name} - {b.specialty}</option>
@@ -148,36 +156,36 @@ export default function ClientView({ session }) {
         </div>
         <div style={{ marginBottom: '15px' }}>
           <label>Date:</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }} />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={centralizedInputStyle} />
         </div>
         <div style={{ marginBottom: '15px' }}>
           <label>Time:</label>
-          {/* step="3600" strips minute granularities out of the default native interface UI wheel */}
           <input 
             type="time" 
             value={time} 
             onChange={(e) => setTime(e.target.value)} 
             required 
             step="3600" 
-            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }} 
+            style={centralizedInputStyle} 
           />
         </div>
-        <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '10px', backgroundColor: isSubmitting ? '#ccc' : '#222', color: 'white', border: 'none', borderRadius: '4px', cursor: isSubmitting ? 'not-allowed' : 'pointer', boxSizing: 'border-box' }}>
+        <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '10px', backgroundColor: isSubmitting ? '#ccc' : '#222', color: 'white', border: 'none', borderRadius: '4px', cursor: isSubmitting ? 'not-allowed' : 'pointer', boxSizing: 'border-box', display: 'block' }}>
           {isSubmitting ? 'Checking availability...' : 'Confirm Booking'}
         </button>
       </form>
 
       {/* --- REFINED SECTION: MY APPOINTMENTS HISTORY CONTAINER --- */}
       <h3 style={{ marginTop: '40px', borderTop: '1px solid #eee', paddingTop: '20px' }}>My Bookings</h3>
-      <ul style={{ paddingLeft: '0', marginRight: '0', listStyle: 'none', width: '100%' }}>
+      {/* Zero out margins and padding to kill browser default indentation styles */}
+      <ul style={{ padding: '0', margin: '0', listStyle: 'none', width: '100%', boxSizing: 'border-box' }}>
         {myAppointments.length === 0 ? (
-          <li style={{ color: '#777', fontStyle: 'italic' }}>No appointments registered yet.</li>
+          <li style={{ color: '#777', fontStyle: 'italic', padding: '10px 0' }}>No appointments registered yet.</li>
         ) : (
           myAppointments.map((appt) => (
             <li 
               key={appt.id} 
               style={{ 
-                padding: '12px 10px', 
+                padding: '12px 0', // Removed inner horizontal padding to align flush with container bounds
                 borderBottom: '1px solid #f1f1f1', 
                 display: 'flex', 
                 justifyContent: 'space-between', 
