@@ -53,19 +53,24 @@ export default function ClientView({ session }) {
     setSuccessMessage('')
 
     try {
+      // Forzamos la lectura limpia del ID de la sesión actual del usuario activo
+      const currentUserId = session?.user?.id || (await supabase.auth.getUser()).data.user?.id;
+
+      if (!currentUserId) {
+        throw new Error('User session not found. Please sign in again.');
+      }
+
       const { error } = await supabase
-      .from('appointments')
-      .insert([
-        {
-          client_id: session.user.id,
-          barber_id: Number(selectedBarber), 
-          appointment_date: date,
-          appointment_time: time,
-          status: 'pending'
-        }
-      ],
-      { returning: 'minimal' } 
-    )
+        .from('appointments')
+        .insert([
+          {
+            client_id: currentUserId, // Aseguramos el envío del ID limpio
+            barber_id: Number(selectedBarber), 
+            appointment_date: date,
+            appointment_time: time,
+            status: 'pending'
+          }
+        ])
 
       if (error) throw error
 
@@ -74,7 +79,6 @@ export default function ClientView({ session }) {
       setDate('')
       setTime('')
       
-      // Reload history so the new appointment appears in the list below
       fetchData()
     } catch (error) {
       console.error('Error scheduling appointment:', error.message)
