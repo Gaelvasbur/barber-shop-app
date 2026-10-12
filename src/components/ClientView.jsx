@@ -14,7 +14,7 @@ export default function ClientView({ session }) {
   // Function to load barbers and appointments for this specific client
   const fetchData = async () => {
     try {
-      // 1. Fetch barbers
+      // 1. Fetch barbers data catalog
       const { data: barbersData, error: barbersError } = await supabase
         .from('barbers')
         .select('*')
@@ -31,7 +31,7 @@ export default function ClientView({ session }) {
           status,
           barbers (name)
         `)
-        .eq('client_id', session.user.id) // Security filter: only my appointments
+        .eq('client_id', session.user.id) // Security filter: scope query down to this user session row space
         .order('appointment_date', { ascending: true })
 
       if (apptsError) throw apptsError
@@ -45,7 +45,7 @@ export default function ClientView({ session }) {
   useEffect(() => {
     fetchData()
   }, [session])
-
+  
   const handleReserve = async (e) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -59,19 +59,27 @@ export default function ClientView({ session }) {
         throw new Error('User session not found. Please sign in again.');
       }
 
+      // Ensure a barber selection exists before submitting execution
+      if (!selectedBarber) {
+        throw new Error('Please select a barber.');
+      }
+
+      // 1. DATE FORMATTING: Native HTML5 inputs return "YYYY-MM-DD" natively
+      // Fallback parsing strategy activated only if string contains manual slashes '/'
       let formattedDate = date;
       if (date.includes('/')) {
         const parts = date.split('/');
-        if (parts[0].length === 2 && parts[2].length === 4) {
+        if (parts.length === 3) {
           formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
         }
       }
 
+      // 2. TIME FORMATTING: Safe normalization supporting 24h formats and AM/PM variants
       let formattedTime = time;
       if (time.toLowerCase().includes('m.')) {
-        const cleanTime = time.toLowerCase().replace(/\s/g, '').replace(/\./g, ''); // "09:00am"
+        const cleanTime = time.toLowerCase().replace(/\s/g, '').replace(/\./g, ''); // Engine sweep: e.g. "12:00am"
         const isPM = cleanTime.includes('pm');
-        const justNumbers = cleanTime.replace('am', '').replace('pm', ''); // "09:00"
+        const justNumbers = cleanTime.replace('am', '').replace('pm', ''); // Token strip: e.g. "12:00"
         let [hours, minutes] = justNumbers.split(':');
         
         if (isPM && hours !== '12') hours = String(Number(hours) + 12);
@@ -80,12 +88,20 @@ export default function ClientView({ session }) {
         formattedTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
       }
 
+      // Ensure strict HH:MM:SS layout pattern compatibility for PostgreSQL time columns
+      if (formattedTime && formattedTime.split(':').length === 2) {
+        formattedTime = `${formattedTime}:00`;
+      }
+
+      // 3. INTEL_ID PARSING: Dynamic type casting targeting integer IDs and UUID string hashes
+      const finalBarberId = isNaN(Number(selectedBarber)) ? selectedBarber : Number(selectedBarber);
+
       const { error } = await supabase
         .from('appointments')
         .insert([
           {
             client_id: currentUserId,
-            barber_id: Number(selectedBarber), 
+            barber_id: finalBarberId, 
             appointment_date: formattedDate, 
             appointment_time: formattedTime, 
             status: 'pending'
@@ -102,12 +118,12 @@ export default function ClientView({ session }) {
       fetchData()
     } catch (error) {
       console.error('Data formatting or insertion error:', error.message)
-      setErrorMessage('Booking failed. Please check date/time format or pick another slot.')
+      // Expanded debug tracking layer evaluating native database constraint validation rules directly on screen
+      setErrorMessage(`Booking failed: ${error.message || 'Please check date/time format.'}`);
     } finally {
       setIsSubmitting(false)
     }
   }
-
 
   return (
     <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', position: 'relative' }}>
