@@ -1,6 +1,6 @@
 # 💈 BarberShop App ChopTime - Full-Stack Appointment Management System 
 
-A production-ready web application designed to optimize schedule management, appointment control, and operational workflows for a local business. This project was engineered following a modern decoupled architecture, focusing on solving real-world logical bottlenecks, relational data persistence, and strict role-based access control.
+A production-ready web application built with React, designed to optimize schedule management, appointment control, and operational workflows for a local business. This project was engineered following a modern decoupled architecture, focusing on solving real-world logical bottlenecks, relational data persistence, and strict role-based access control.
 
 ## 🚀 Core Features
 
