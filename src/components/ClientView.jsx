@@ -67,15 +67,26 @@ export default function ClientView({ session }) {
       let formattedDate = date;
       let formattedTime = time;
 
+      // 2. TIMING ENFORCEMENT LAYER: Guard clause protecting top-of-the-hour alignment slots (HH:00)
+      if (formattedTime) {
+        const timeParts = formattedTime.split(':');
+        const minutes = timeParts[1];
+        
+        // Hard-abort transaction if minute values are modified outside standard zero-bound increments
+        if (minutes !== '00') {
+          throw new Error('Appointments can only be booked exactly at the top of the hour (e.g., 1:00, 2:00). Minutes are invalid.');
+        }
+      }
+
       // Ensure strict HH:MM:SS format compatibility for PostgreSQL time columns
       if (formattedTime && formattedTime.split(':').length === 2) {
         formattedTime = `${formattedTime}:00`;
       }
 
-      // 2. ID CASTING: Safely handle numeric IDs or UUID hashes
+      // 3. ID CASTING: Safely handle numeric IDs or UUID hashes
       const finalBarberId = isNaN(Number(selectedBarber)) ? selectedBarber : Number(selectedBarber);
 
-      // 3. DATABASE INSERTION
+      // 4. DATABASE INSERTION WITH UNIQUE COLLISION HANDLING
       const { error: insertError } = await supabase
         .from('appointments')
         .insert([
@@ -88,7 +99,13 @@ export default function ClientView({ session }) {
           }
         ]);
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        // Intercept PostgreSQL unique constraint index triggers (error code 23505)
+        if (insertError.code === '23505') {
+          throw new Error('This specific hour slot is already booked for this barber. Please select another time.');
+        }
+        throw insertError;
+      }
 
       setSuccessMessage('Your appointment has been successfully scheduled!')
       setSelectedBarber('')
@@ -98,8 +115,7 @@ export default function ClientView({ session }) {
       fetchData()
     } catch (error) {
       console.error('Database rejection payload:', error);
-      // THIS WILL SHOW THE REAL ERROR ON YOUR SCREEN:
-      setErrorMessage(`Database Error: ${error.message || error.details || 'Unknown error'}`);
+      setErrorMessage(error.message || 'An unexpected error occurred.');
     } finally {
       setIsSubmitting(false)
     }
@@ -136,7 +152,15 @@ export default function ClientView({ session }) {
         </div>
         <div style={{ marginBottom: '15px' }}>
           <label>Time:</label>
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px' }} />
+          {/* step="3600" strips minute granularities out of the default native interface UI wheel */}
+          <input 
+            type="time" 
+            value={time} 
+            onChange={(e) => setTime(e.target.value)} 
+            required 
+            step="3600" 
+            style={{ width: '100%', padding: '8px', marginTop: '5px' }} 
+          />
         </div>
         <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '10px', backgroundColor: isSubmitting ? '#ccc' : '#222', color: 'white', border: 'none', borderRadius: '4px', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
           {isSubmitting ? 'Checking availability...' : 'Confirm Booking'}
