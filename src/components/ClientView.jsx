@@ -63,7 +63,9 @@ export default function ClientView({ session }) {
           appointment_time: time,
           status: 'pending'
         }
-      ])
+      ],
+      { returning: 'minimal' } 
+    )
 
       if (error) throw error
 
