@@ -53,21 +53,41 @@ export default function ClientView({ session }) {
     setSuccessMessage('')
 
     try {
-      // Forzamos la lectura limpia del ID de la sesión actual del usuario activo
       const currentUserId = session?.user?.id || (await supabase.auth.getUser()).data.user?.id;
 
       if (!currentUserId) {
         throw new Error('User session not found. Please sign in again.');
       }
 
+      let formattedDate = date;
+      if (date.includes('/')) {
+        const parts = date.split('/');
+        if (parts[0].length === 2 && parts[2].length === 4) {
+          formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+      }
+
+      let formattedTime = time;
+      if (time.toLowerCase().includes('m.')) {
+        const cleanTime = time.toLowerCase().replace(/\s/g, '').replace(/\./g, ''); // "09:00am"
+        const isPM = cleanTime.includes('pm');
+        const justNumbers = cleanTime.replace('am', '').replace('pm', ''); // "09:00"
+        let [hours, minutes] = justNumbers.split(':');
+        
+        if (isPM && hours !== '12') hours = String(Number(hours) + 12);
+        if (!isPM && hours === '12') hours = '00';
+        
+        formattedTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+      }
+
       const { error } = await supabase
         .from('appointments')
         .insert([
           {
-            client_id: currentUserId, // Aseguramos el envío del ID limpio
+            client_id: currentUserId,
             barber_id: Number(selectedBarber), 
-            appointment_date: date,
-            appointment_time: time,
+            appointment_date: formattedDate, 
+            appointment_time: formattedTime, 
             status: 'pending'
           }
         ])
@@ -81,12 +101,13 @@ export default function ClientView({ session }) {
       
       fetchData()
     } catch (error) {
-      console.error('Error scheduling appointment:', error.message)
-      setErrorMessage('Booking failed. Please try again with a different time slot.')
+      console.error('Data formatting or insertion error:', error.message)
+      setErrorMessage('Booking failed. Please check date/time format or pick another slot.')
     } finally {
       setIsSubmitting(false)
     }
   }
+
 
   return (
     <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', position: 'relative' }}>
