@@ -59,44 +59,24 @@ export default function ClientView({ session }) {
         throw new Error('User session not found. Please sign in again.');
       }
 
-      // Ensure a barber selection exists before submitting execution
       if (!selectedBarber) {
         throw new Error('Please select a barber.');
       }
 
-      // 1. DATE FORMATTING: Native HTML5 inputs return "YYYY-MM-DD" natively
-      // Fallback parsing strategy activated only if string contains manual slashes '/'
+      // 1. DIRECT FORMATTING: Take native HTML5 strings directly ("YYYY-MM-DD" and "HH:MM")
       let formattedDate = date;
-      if (date.includes('/')) {
-        const parts = date.split('/');
-        if (parts.length === 3) {
-          formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-        }
-      }
-
-      // 2. TIME FORMATTING: Safe normalization supporting 24h formats and AM/PM variants
       let formattedTime = time;
-      if (time.toLowerCase().includes('m.')) {
-        const cleanTime = time.toLowerCase().replace(/\s/g, '').replace(/\./g, ''); // Engine sweep: e.g. "12:00am"
-        const isPM = cleanTime.includes('pm');
-        const justNumbers = cleanTime.replace('am', '').replace('pm', ''); // Token strip: e.g. "12:00"
-        let [hours, minutes] = justNumbers.split(':');
-        
-        if (isPM && hours !== '12') hours = String(Number(hours) + 12);
-        if (!isPM && hours === '12') hours = '00';
-        
-        formattedTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
-      }
 
-      // Ensure strict HH:MM:SS layout pattern compatibility for PostgreSQL time columns
+      // Ensure strict HH:MM:SS format compatibility for PostgreSQL time columns
       if (formattedTime && formattedTime.split(':').length === 2) {
         formattedTime = `${formattedTime}:00`;
       }
 
-      // 3. INTEL_ID PARSING: Dynamic type casting targeting integer IDs and UUID string hashes
+      // 2. ID CASTING: Safely handle numeric IDs or UUID hashes
       const finalBarberId = isNaN(Number(selectedBarber)) ? selectedBarber : Number(selectedBarber);
 
-      const { error } = await supabase
+      // 3. DATABASE INSERTION
+      const { error: insertError } = await supabase
         .from('appointments')
         .insert([
           {
@@ -106,9 +86,9 @@ export default function ClientView({ session }) {
             appointment_time: formattedTime, 
             status: 'pending'
           }
-        ])
+        ]);
 
-      if (error) throw error
+      if (insertError) throw insertError;
 
       setSuccessMessage('Your appointment has been successfully scheduled!')
       setSelectedBarber('')
@@ -117,13 +97,14 @@ export default function ClientView({ session }) {
       
       fetchData()
     } catch (error) {
-      console.error('Data formatting or insertion error:', error.message)
-      // Expanded debug tracking layer evaluating native database constraint validation rules directly on screen
-      setErrorMessage(`Booking failed: ${error.message || 'Please check date/time format.'}`);
+      console.error('Database rejection payload:', error);
+      // THIS WILL SHOW THE REAL ERROR ON YOUR SCREEN:
+      setErrorMessage(`Database Error: ${error.message || error.details || 'Unknown error'}`);
     } finally {
       setIsSubmitting(false)
     }
   }
+
 
   return (
     <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', position: 'relative' }}>
