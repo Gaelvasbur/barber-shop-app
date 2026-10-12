@@ -9,8 +9,8 @@ function App() {
   const [userRole, setUserRole] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Strict role query with orphan session detection
-  const fetchUserRole = async (userId) => {
+  // Consulta del rol optimizada con reintentos para producción
+  const fetchUserRole = async (userId, retryCount = 0) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -18,10 +18,17 @@ function App() {
         .eq('id', userId)
         .single()
 
-      // If the browser session exists but the profile is missing in PostgreSQL
       if (error) {
-        console.warn('Profile not found. Clearing corrupted session...')
-        await supabase.auth.signOut() // Force sign out to clean up the browser state
+        // Si el perfil no se encuentra en el primer milisegundo (desfase de red), 
+        // le damos hasta 3 reintentos antes de dar la sesión por corrupta.
+        if (retryCount < 3) {
+          console.log(`Profile syncing... Retry attempt #${retryCount + 1}`)
+          setTimeout(() => fetchUserRole(userId, retryCount + 1), 1000)
+          return
+        }
+
+        console.warn('Profile genuinely missing. Clearing session...')
+        await supabase.auth.signOut()
         setSession(null)
         setUserRole(null)
         setLoading(false)
@@ -30,7 +37,7 @@ function App() {
       
       if (data) {
         setUserRole(data.role)
-        setLoading(false) // Release the loading screen
+        setLoading(false) // Liberamos la pantalla de carga de forma segura
       }
     } catch (error) {
       console.error('Critical error fetching user role:', error.message)
@@ -39,7 +46,7 @@ function App() {
   }
 
   useEffect(() => {
-    // 1. Verify initial session upon page load
+    // 1. Verificar sesión inicial al cargar la página
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) {
@@ -49,11 +56,12 @@ function App() {
       }
     })
 
-    // 2. Listen to real-time authentication state changes
+    // 2. Escuchar cambios de autenticación en tiempo real
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       if (session) {
-        if (event === 'SIGNED_IN') {
+        // Forzamos la verificación solo en eventos de entrada o cambios reales
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           setLoading(true)
           fetchUserRole(session.user.id)
         }
