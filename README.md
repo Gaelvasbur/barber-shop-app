@@ -12,9 +12,9 @@ A production-ready React application deployed on Vercel, designed to optimize fu
 
 ## 🛠️ Tech Stack
 
-- **Frontend:** React JS, Vite, JavaScript (ES6+), HTML5.
-- **Backend as a Service (BaaS):** Supabase (PostgreSQL, Data API, Auth).
-- **Deployment:** Vercel (Continuous Integration / Continuous Deployment).
+- **Frontend & Core:** React JS, Vite, TypeScript, JavaScript (ES6+), HTML5.
+- **Backend & Persistence:** Supabase (PostgreSQL, Data API, Auth, PL/pgSQL Triggers).
+- **DevOps & Deployment:** Docker (Containerization), Vercel (CI/CD Deployment Pipelines).
 
 ---
 
@@ -65,6 +65,5 @@ To demonstrate competitive engineering skills within enterprise environments, th
 ## 🌐 Project Link
 
 You can view the live project here: 👉 https://barber-shop-app-kappa.vercel.app/
-
 
 

@@ -41,32 +41,28 @@ export default function Login() {
 
     try {
       if (isRegistering) {
+        // Determinamos el rol inicial basado en el correo del usuario
+        const assignedRole = email.includes('admin') ? 'barber' : 'client'
+
         // 1. Register the user profile securely in Supabase Auth backend
+        // Enviamos full_name y role dentro de la metadata para que el Trigger los reciba en el servidor
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              full_name: fullName,
+              role: assignedRole
+            }
+          }
         })
 
         if (authError) throw authError
 
-        // 2. Structural sync block: Persist the relational row entry inside the PostgreSQL database space
+        // 2. ¡EL PROCESO SE SIMPLIFICA! 
+        // Ya no necesitamos el .insert() manual desde JavaScript. 
+        // El Trigger en la base de datos se activa en este milisegundo de forma interna.
         if (authData?.user) {
-          const assignedRole = email.includes('admin') ? 'barber' : 'client'
-
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-              {
-                id: authData.user.id,
-                full_name: fullName,
-                role: assignedRole
-              }
-            ])
-
-          if (profileError) {
-            throw new Error(`Profile synchronization blocked: ${profileError.message}`);
-          }
-          
           alert('Account successfully created! Please sign in with your credentials.');
           setIsRegistering(false); // Clean routing switch over to regular Login mode
           setFullName('');
@@ -131,5 +127,4 @@ export default function Login() {
     </div>
   )
 }
-
 
