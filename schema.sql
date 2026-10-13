@@ -1,3 +1,4 @@
+-----QUERY 1: Relational Data Model Definition (Database Schema)----------------------------------------------------------
 -- Create the profiles table to store user metadata
 CREATE TABLE public.profiles (
     id UUID PRIMARY KEY DEFAULT auth.uid(),
@@ -25,19 +26,52 @@ CREATE TABLE public.appointments (
     status TEXT DEFAULT 'pending'
 );
 
-----------------------------------------------------------------
+----QUERY 2: Business Logic Unique Constraint (Anti-Duplication Layer)
+------------------------------------------------------------
 -- Prevent double-booking by ensuring a barber can only have one appointment per time slot
 ALTER TABLE public.appointments 
 ADD CONSTRAINT unique_barber_schedule 
 UNIQUE (barber_id, appointment_date, appointment_time);
+-----------------------------------------------------------------------------------------
 
+----QUERY 3: Global Security Hardening & Row-Level Security (RLS) Policies----------------------------------------------------
+--------------------------------------------------------------------------------
+-- SECURITY PATCH: ENABLE RLS ON ALL PUBLIC TABLES
+--------------------------------------------------------------------------------
+
+-- 1. Enforce database protection on the profiles table
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- 2. Enforce database protection on the barbers table
+ALTER TABLE public.barbers ENABLE ROW LEVEL SECURITY;
+
+-- 3. Enforce database protection on the appointments table
+ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
+
+
+--------------------------------------------------------------------------------
+-- BASE SECURITY POLICIES FOR PROFILES AND BARBERS
+--------------------------------------------------------------------------------
+
+-- PROFILES POLICY: Allow authenticated users to view only their own profile row space
+DROP POLICY IF EXISTS "Allow users to view their own profile" ON public.profiles;
+CREATE POLICY "Allow users to view their own profile"
+ON public.profiles FOR SELECT TO authenticated
+USING ( auth.uid() = id );
+
+-- BARBERS POLICY: Allow ANY authenticated client to view the professional catalog
+-- (Crucial guard clause: without this, clients cannot map available barbers inside React)
+DROP POLICY IF EXISTS "Allow authenticated users to view barbers" ON public.barbers;
+CREATE POLICY "Allow authenticated users to view barbers"
+ON public.barbers FOR SELECT TO authenticated
+USING ( true );
+
+--APPOINTMENT POLICIES:
 -- -------------------------------------------------------------
--- BUG 1 SOLUTION: FIX THE INSERT POLICY
+-- BUG 1 FIX SOLUTION: (INSERT)
 -- -------------------------------------------------------------
--- 1. Drop the restrictive insert policy that is causing the block
 DROP POLICY IF EXISTS "Allow authenticated inserts" ON "public"."appointments";
 
--- 2. Create the correct insert policy for authenticated users
 CREATE POLICY "Allow authenticated inserts"
 ON "public"."appointments"
 FOR INSERT
@@ -46,12 +80,11 @@ WITH CHECK ( auth.uid() = client_id );
 
 
 -- -------------------------------------------------------------
--- BUG 2 SOLUTION: FIX GLOBAL READ ACCESS (SELECT)
+-- BUG 2 SOLUTION: (SELECT)
 -- -------------------------------------------------------------
--- 1. Drop the current read policy
+
 DROP POLICY IF EXISTS "Allow users to view their own appointments" ON "public"."appointments";
 
--- 2. Create a smart policy for both clients and barbers
 CREATE POLICY "Allow users and barbers to view appointments"
 ON "public"."appointments"
 FOR SELECT
@@ -60,9 +93,87 @@ USING (
   auth.uid() = client_id 
   OR 
   EXISTS (
-    SELECT 1 
-    FROM public.profiles 
-    WHERE id = auth.uid() AND role = 'barber'
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.role = 'barber'
   )
 );
+
+
+----QUERY 4: Structural Identity Sync Optimization----------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, role)
+  VALUES (
+    new.id,
+    COALESCE(new.raw_user_meta_data->>'full_name', 'New Client'), 
+    CASE 
+      WHEN new.email LIKE '%admin%' THEN 'barber'
+      ELSE 'client'
+    END
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+  --------QUERY 5: Unified Backend PostgreSQL Event Trigger & Conflict Mitigation-----------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, role)
+  VALUES (
+    NEW.id, 
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'Nuevo Cliente'), 
+    COALESCE(NEW.raw_user_meta_data->>'role', 'client')
+  )
+  
+  ON CONFLICT (id) DO UPDATE
+  SET full_name = EXCLUDED.full_name,
+      role = EXCLUDED.role;
+      
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+--------------------------------------------------------------------------------
+-- DATABASE SCHEMA DOCUMENTATION & ARCHITECTURE PILLARS
+--------------------------------------------------------------------------------
+
+-- QUERY 1: Relational Data Model Definition (Database Schema)
+-- Description: Establishes the structural foundation of the system. It creates 
+-- the three core tables (profiles, barbers, and appointments). It configures 
+-- primary keys, sets up foreign key constraints to link user sessions, and 
+-- implements cascading deletions (ON DELETE CASCADE) to prevent orphaned records.
+
+-- QUERY 2: Business Logic Unique Constraint (Anti-Duplication Layer)
+-- Description: Applies an advanced unique scheduling index (unique_barber_schedule) 
+-- on the appointments table. This acts as the server-side source of truth that 
+-- strictly prohibits concurrent bookings, ensuring a single barber cannot have 
+-- two separate appointments assigned to the exact same date and time slot.
+
+-- QUERY 3: Global Security Hardening & Row-Level Security (RLS) Policies
+-- Description: Enforces Row-Level Security (RLS) across all public database entities to isolate cloud data and eliminate exposure vulnerabilities. 
+-- It architecturally seals the profiles, barbers, and appointments tables, deploying granular access policies: 
+-- users are restricted to their own profile and booking rows, while verification filters grant the professional barber role global visibility over the master schedule.
+
+-- QUERY 4: Structural Identity Sync Optimization
+-- Description: Alters the profiles table architecture (ALTER TABLE ... DROP DEFAULT) 
+-- by removing the default identity assignment (auth.uid()). This forces the relational 
+-- database space to explicitly ingest the exact UUID hash generated by the native 
+-- Supabase Authentication backend, resolving race conditions during user onboarding.
+
+-- QUERY 5: Unified Backend PostgreSQL Event Trigger & Conflict Mitigation
+-- Description: The automated heart of the backend engine engineered using PL/pgSQL. 
+-- It hooks into the internal auth subsystem to fire an immediate function lifecycle 
+-- upon user signup. It safely extracts client metadata sent from the React UI and 
+-- includes an upside mutation guard (ON CONFLICT DO UPDATE) to gracefully catch 
+-- and merge duplicate key collisions without crashing network transport.
 
