@@ -1,23 +1,25 @@
-import { useState } from 'react'
+import { useState, FormEvent } from 'react'
 import { supabase } from '../supabaseClient'
 
 export default function Login() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [isRegistering, setIsRegistering] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
+  // Primitives state management with explicit string and boolean typing
+  const [email, setEmail] = useState<string>('')
+  const [password, setPassword] = useState<string>('')
+  const [fullName, setFullName] = useState<string>('')
+  const [isRegistering, setIsRegistering] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(false)
+  const [errorMessage, setErrorMessage] = useState<string>('')
 
-  // Reusable base style for inputs that corrects the right padding asymmetry
-  const inputStyle = {
+  // Reusable base style object typed for inline CSS rendering
+  const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '8px',
     marginTop: '5px',
-    boxSizing: 'border-box' // Fixes right padding overflow
+    boxSizing: 'border-box' // Fixes right padding overflow bounds
   }
 
-  const validatePassword = (pass) => {
+  // Strong password complexity validation layer powered by Regular Expressions
+  const validatePassword = (pass: string): boolean => {
     const minLength = pass.length >= 8;
     const hasUpper = /[A-Z]/.test(pass);
     const hasLower = /[a-z]/.test(pass);
@@ -27,12 +29,13 @@ export default function Login() {
     return minLength && hasUpper && hasLower && hasNumber && hasSymbol;
   }
 
-  const handleSubmit = async (e) => {
+  // Handle identity ingestion and authentication lifecycle events
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     setLoading(true)
     setErrorMessage('')
 
-    // Enforce password strength requirements ONLY during registration
+    // Enforce strict password validation rules only during account registration
     if (isRegistering && !validatePassword(password)) {
       setErrorMessage('Password must be at least 8 characters long and include uppercase letters, lowercase letters, numbers, and symbols.')
       setLoading(false)
@@ -41,11 +44,11 @@ export default function Login() {
 
     try {
       if (isRegistering) {
-        // Determinamos el rol inicial basado en el correo del usuario
+        // Derive initial role assignment based on specific email domains
         const assignedRole = email.includes('admin') ? 'barber' : 'client'
 
-        // 1. Register the user profile securely in Supabase Auth backend
-        // Enviamos full_name y role dentro de la metadata para que el Trigger los reciba en el servidor
+        // 1. Dispatch profile registration securely toward the Supabase Auth system
+        // Custom metadata values are passed directly so the backend SQL Trigger can map them
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email,
           password,
@@ -59,18 +62,17 @@ export default function Login() {
 
         if (authError) throw authError
 
-        // 2. ¡EL PROCESO SE SIMPLIFICA! 
-        // Ya no necesitamos el .insert() manual desde JavaScript. 
-        // El Trigger en la base de datos se activa en este milisegundo de forma interna.
+        // 2. Client synchronization confirmation block
+        // The server-side Trigger takes full ownership of public.profiles ingestion instantly
         if (authData?.user) {
           alert('Account successfully created! Please sign in with your credentials.');
-          setIsRegistering(false); // Clean routing switch over to regular Login mode
+          setIsRegistering(false); // Clean visual state routing switch back to default Login mode
           setFullName('');
           setEmail('');
           setPassword('');
         }
       } else {
-        // 3. Authenticate active state validation session
+        // 3. Authenticate active credentials state and initialize token exchange session
         const { error: loginError } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -79,8 +81,14 @@ export default function Login() {
         if (loginError) throw loginError
       }
     } catch (error) {
-      console.error('Authentication process failure:', error.message)
-      setErrorMessage(error.message || 'An unexpected error occurred.')
+      // Type assertion guard protects network payload error messaging extractions
+      if (error instanceof Error) {
+        console.error('Authentication process failure:', error.message)
+        setErrorMessage(error.message)
+      } else {
+        console.error('An unexpected authentication anomaly occurred.')
+        setErrorMessage('An unexpected error occurred.')
+      }
     } finally {
       setLoading(false)
     }
@@ -127,4 +135,3 @@ export default function Login() {
     </div>
   )
 }
-

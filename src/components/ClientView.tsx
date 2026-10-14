@@ -1,36 +1,65 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { supabase } from '../supabaseClient'
+import { Session } from '@supabase/supabase-js'
 
-export default function ClientView({ session }) {
-  const [barbers, setBarbers] = useState([])
-  const [myAppointments, setMyAppointments] = useState([]) // State to store client appointments
-  const [selectedBarber, setSelectedBarber] = useState('')
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
+// Define the blueprint structure for the component props
+interface ClientViewProps {
+  session: Session
+}
 
-  // Normalized input style to ensure identity size across select, date, and time elements
-  const centralizedInputStyle = {
+// Define the shape of a record inside the 'barbers' PostgreSQL catalog table
+interface Barber {
+  id: number | string
+  name: string
+  specialty: string
+}
+
+// Define the shape of a nested relation mapping the professional identifier name
+interface NestedBarberName {
+  name: string
+}
+
+// Define the shape of a record inside the 'appointments' core table mapping database joins
+interface Appointment {
+  id: number
+  appointment_date: string
+  appointment_time: string
+  status: string
+  barbers: NestedBarberName | null
+}
+
+export default function ClientView({ session }: ClientViewProps) {
+  // Strong-state management enforcing specific database object shapes
+  const [barbers, setBarbers] = useState<Barber[]>([])
+  const [myAppointments, setMyAppointments] = useState<Appointment[]>([]) 
+  const [selectedBarber, setSelectedBarber] = useState<string>('')
+  const [date, setDate] = useState<string>('')
+  const [time, setTime] = useState<string>('')
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+  const [errorMessage, setErrorMessage] = useState<string>('')
+  const [successMessage, setSuccessMessage] = useState<string>('')
+
+  // Reusable visual layout engine ensuring design integrity
+  const centralizedInputStyle: React.CSSProperties = {
     width: '100%',
     padding: '8px',
     marginTop: '5px',
-    boxSizing: 'border-box', // Forces identical width rendering across different tags
-    display: 'block' // Eliminates structural differences in rendering inline blocks
+    boxSizing: 'border-box', 
+    display: 'block' 
   }
 
-  // Function to load barbers and appointments for this specific client
-  const fetchData = async () => {
+  // Orchestrate network trace fetching vectors to sync data catalogs down from the cloud
+  const fetchData = async (): Promise<void> => {
     try {
-      // 1. Fetch barbers data catalog
+      // 1. Fetch available barbers mapping global schema definitions
       const { data: barbersData, error: barbersError } = await supabase
         .from('barbers')
         .select('*')
+      
       if (barbersError) throw barbersError
-      setBarbers(barbersData || [])
+      setBarbers((barbersData as Barber[]) || [])
 
-      // 2. Fetch appointments for the current client linking the barber name
+      // 2. Query relational appointment tables limiting visibility scope down to the active row session context
       const { data: apptsData, error: apptsError } = await supabase
         .from('appointments')
         .select(`
@@ -40,29 +69,34 @@ export default function ClientView({ session }) {
           status,
           barbers (name)
         `)
-        .eq('client_id', session.user.id) // Security filter: scope query down to this user session row space
+        .eq('client_id', session.user.id) 
         .order('appointment_date', { ascending: true })
 
       if (apptsError) throw apptsError
-      setMyAppointments(apptsData || [])
+      setMyAppointments((apptsData as unknown as Appointment[]) || [])
     } catch (error) {
-      console.error('Error loading data:', error.message)
+      if (error instanceof Error) {
+        console.error('Error loading data:', error.message)
+      } else {
+        console.error('An unexpected relational query fault occurred.')
+      }
       setErrorMessage('An error occurred while fetching information.')
     }
-  };
+  }
 
   useEffect(() => {
     fetchData()
   }, [session])
   
-  const handleReserve = async (e) => {
+  // Intercept and isolate UI submission pipelines
+  const handleReserve = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     setIsSubmitting(true)
     setErrorMessage('')
     setSuccessMessage('')
 
     try {
-      const currentUserId = session?.user?.id || (await supabase.auth.getUser()).data.user?.id;
+      const currentUserId: string = session?.user?.id || (await supabase.auth.getUser()).data.user?.id || '';
 
       if (!currentUserId) {
         throw new Error('User session not found. Please sign in again.');
@@ -72,30 +106,26 @@ export default function ClientView({ session }) {
         throw new Error('Please select a barber.');
       }
 
-      // 1. DIRECT FORMATTING: Take native HTML5 strings directly ("YYYY-MM-DD" and "HH:MM")
-      let formattedDate = date;
-      let formattedTime = time;
+      let formattedDate: string = date;
+      let formattedTime: string = time;
 
-      // 2. TIMING ENFORCEMENT LAYER: Guard clause protecting top-of-the-hour alignment slots (HH:00)
+      // Timing validation rule block verifying standard hour increments boundary alignments
       if (formattedTime) {
-        const timeParts = formattedTime.split(':');
-        const minutes = timeParts[1];
+        const timeParts: string[] = formattedTime.split(':');
+        const minutes: string = timeParts[1];
         
-        // Hard-abort transaction if minute values are modified outside standard zero-bound increments
         if (minutes !== '00') {
           throw new Error('Appointments can only be booked exactly at the top of the hour (e.g., 1:00, 2:00). Minutes are invalid.');
         }
       }
 
-      // Ensure strict HH:MM:SS format compatibility for PostgreSQL time columns
       if (formattedTime && formattedTime.split(':').length === 2) {
         formattedTime = `${formattedTime}:00`;
       }
 
-      // 3. ID CASTING: Safely handle numeric IDs or UUID hashes
-      const finalBarberId = isNaN(Number(selectedBarber)) ? selectedBarber : Number(selectedBarber);
+      const finalBarberId: number | string = isNaN(Number(selectedBarber)) ? selectedBarber : Number(selectedBarber);
 
-      // 4. DATABASE INSERTION WITH UNIQUE COLLISION HANDLING
+      // Submit sanitized payload metrics into the serverless backend
       const { error: insertError } = await supabase
         .from('appointments')
         .insert([
@@ -109,7 +139,7 @@ export default function ClientView({ session }) {
         ]);
 
       if (insertError) {
-        // Intercept PostgreSQL unique constraint index triggers (error code 23505)
+        // Intercept PostgreSQL unique index errors (Constraint Code 23505) and resolve collisions gracefully
         if (insertError.code === '23505') {
           throw new Error('This specific hour slot is already booked for this barber. Please select another time.');
         }
@@ -121,10 +151,15 @@ export default function ClientView({ session }) {
       setDate('')
       setTime('')
       
-      fetchData()
+      await fetchData()
     } catch (error) {
-      console.error('Database rejection payload:', error);
-      setErrorMessage(error.message || 'An unexpected error occurred.');
+      if (error instanceof Error) {
+        console.error('Database rejection payload:', error.message);
+        setErrorMessage(error.message);
+      } else {
+        console.error('An unmapped transport fault occurred.');
+        setErrorMessage('An unexpected error occurred.');
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -174,9 +209,7 @@ export default function ClientView({ session }) {
         </button>
       </form>
 
-      {/* --- REFINED SECTION: MY APPOINTMENTS HISTORY CONTAINER --- */}
       <h3 style={{ marginTop: '40px', borderTop: '1px solid #eee', paddingTop: '20px' }}>My Bookings</h3>
-      {/* Zero out margins and padding to kill browser default indentation styles */}
       <ul style={{ padding: '0', margin: '0', listStyle: 'none', width: '100%', boxSizing: 'border-box' }}>
         {myAppointments.length === 0 ? (
           <li style={{ color: '#777', fontStyle: 'italic', padding: '10px 0' }}>No appointments registered yet.</li>
@@ -185,7 +218,7 @@ export default function ClientView({ session }) {
             <li 
               key={appt.id} 
               style={{ 
-                padding: '12px 0', // Removed inner horizontal padding to align flush with container bounds
+                padding: '12px 0', 
                 borderBottom: '1px solid #f1f1f1', 
                 display: 'flex', 
                 justifyContent: 'space-between', 
