@@ -1,6 +1,6 @@
 # 💈 BarberShop App ChopTime - Full-Stack Appointment Management System 
 
-A production-ready React application deployed on Vercel, designed to optimize full-stack appointment management and operational workflows for a local business. This project was engineered following a modern decoupled architecture, focusing on solving real-world logical bottlenecks, relational data persistence, and strict role-based access control.
+A Docker-containerized React & TypeScript production-ready application deployed on Vercel, designed to optimize full-stack appointment management and operational workflows for a local business. This project was engineered following a modern decoupled architecture, focusing on solving real-world logical bottlenecks, relational data persistence, and strict role-based access control.
 
 ## 🚀 Core Features
 
