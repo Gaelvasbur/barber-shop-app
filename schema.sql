@@ -35,60 +35,31 @@ UNIQUE (barber_id, appointment_date, appointment_time);
 -----------------------------------------------------------------------------------------
 
 ----QUERY 3: Global Security Hardening & Row-Level Security (RLS) Policies----------------------------------------------------
---------------------------------------------------------------------------------
--- SECURITY PATCH: ENABLE RLS ON ALL PUBLIC TABLES
---------------------------------------------------------------------------------
-
--- 1. Enforce database protection on the profiles table
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
--- 2. Enforce database protection on the barbers table
 ALTER TABLE public.barbers ENABLE ROW LEVEL SECURITY;
-
--- 3. Enforce database protection on the appointments table
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 
-
---------------------------------------------------------------------------------
--- BASE SECURITY POLICIES FOR PROFILES AND BARBERS
---------------------------------------------------------------------------------
-
--- PROFILES POLICY: Allow authenticated users to view only their own profile row space
+-- PROFILES POLICIES
 DROP POLICY IF EXISTS "Allow users to view their own profile" ON public.profiles;
 CREATE POLICY "Allow users to view their own profile"
 ON public.profiles FOR SELECT TO authenticated
 USING ( auth.uid() = id );
 
--- BARBERS POLICY: Allow ANY authenticated client to view the professional catalog
--- (Crucial guard clause: without this, clients cannot map available barbers inside React)
+-- BARBERS POLICIES
 DROP POLICY IF EXISTS "Allow authenticated users to view barbers" ON public.barbers;
 CREATE POLICY "Allow authenticated users to view barbers"
 ON public.barbers FOR SELECT TO authenticated
 USING ( true );
 
---APPOINTMENT POLICIES:
--- -------------------------------------------------------------
--- BUG 1 FIX SOLUTION: (INSERT)
--- -------------------------------------------------------------
-DROP POLICY IF EXISTS "Allow authenticated inserts" ON "public"."appointments";
-
+-- APPOINTMENTS POLICIES (INSERT, SELECT & THE NEW UPDATE PATCH)
+DROP POLICY IF EXISTS "Allow authenticated inserts" ON public.appointments;
 CREATE POLICY "Allow authenticated inserts"
-ON "public"."appointments"
-FOR INSERT
-TO authenticated
+ON public.appointments FOR INSERT TO authenticated
 WITH CHECK ( auth.uid() = client_id );
 
-
--- -------------------------------------------------------------
--- BUG 2 SOLUTION: (SELECT)
--- -------------------------------------------------------------
-
-DROP POLICY IF EXISTS "Allow users to view their own appointments" ON "public"."appointments";
-
+DROP POLICY IF EXISTS "Allow users and barbers to view appointments" ON public.appointments;
 CREATE POLICY "Allow users and barbers to view appointments"
-ON "public"."appointments"
-FOR SELECT
-TO authenticated
+ON public.appointments FOR SELECT TO authenticated
 USING (
   auth.uid() = client_id 
   OR 
@@ -98,31 +69,28 @@ USING (
   )
 );
 
+-- Aquí agregamos el parche del UPDATE dentro de la Query 3
+DROP POLICY IF EXISTS "Allow users and barbers to update appointments" ON public.appointments;
+CREATE POLICY "Allow users and barbers to update appointments"
+ON public.appointments FOR UPDATE TO authenticated
+USING (
+  auth.uid() = client_id 
+  OR 
+  EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.role = 'barber'
+  )
+)
+WITH CHECK (
+  auth.uid() = client_id 
+  OR 
+  EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid() AND profiles.role = 'barber'
+  )
+);
 
-----QUERY 4: Structural Identity Sync Optimization----------------------------------------------------
-
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
-BEGIN
-  INSERT INTO public.profiles (id, full_name, role)
-  VALUES (
-    new.id,
-    COALESCE(new.raw_user_meta_data->>'full_name', 'New Client'), 
-    CASE 
-      WHEN new.email LIKE '%admin%' THEN 'barber'
-      ELSE 'client'
-    END
-  );
-  RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
-  --------QUERY 5: Unified Backend PostgreSQL Event Trigger & Conflict Mitigation-----------------------------------------------------
+-----QUERY 4: Identity Synchronization & Role Escalation Trigger-------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -131,9 +99,11 @@ BEGIN
   VALUES (
     NEW.id, 
     COALESCE(NEW.raw_user_meta_data->>'full_name', 'Nuevo Cliente'), 
-    COALESCE(NEW.raw_user_meta_data->>'role', 'client')
+    CASE 
+      WHEN NEW.email LIKE '%admin%' THEN 'barber'
+      ELSE COALESCE(NEW.raw_user_meta_data->>'role', 'client')
+    END
   )
-  
   ON CONFLICT (id) DO UPDATE
   SET full_name = EXCLUDED.full_name,
       role = EXCLUDED.role;
@@ -141,6 +111,11 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 
 --------------------------------------------------------------------------------
@@ -164,16 +139,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- It architecturally seals the profiles, barbers, and appointments tables, deploying granular access policies: 
 -- users are restricted to their own profile and booking rows, while verification filters grant the professional barber role global visibility over the master schedule.
 
--- QUERY 4: Structural Identity Sync Optimization
--- Description: Alters the profiles table architecture (ALTER TABLE ... DROP DEFAULT) 
--- by removing the default identity assignment (auth.uid()). This forces the relational 
--- database space to explicitly ingest the exact UUID hash generated by the native 
--- Supabase Authentication backend, resolving race conditions during user onboarding.
+----QUERY 4: Unified Identity Synchronization & Role Escalation Trigger------------------------------------------
+-- Description: Automates profile provisioning directly from the internal auth engine using PL/pgSQL. 
+-- It implements safe parsing of React metadata, extracts account email flags to instantly provision the 
+-- administrative 'barber' role, and enforces a high-availability conflict clause (ON CONFLICT DO UPDATE) 
+-- to safely prevent network race conditions or profile duplication bugs during deployment.
 
--- QUERY 5: Unified Backend PostgreSQL Event Trigger & Conflict Mitigation
--- Description: The automated heart of the backend engine engineered using PL/pgSQL. 
--- It hooks into the internal auth subsystem to fire an immediate function lifecycle 
--- upon user signup. It safely extracts client metadata sent from the React UI and 
--- includes an upside mutation guard (ON CONFLICT DO UPDATE) to gracefully catch 
--- and merge duplicate key collisions without crashing network transport.
+
 

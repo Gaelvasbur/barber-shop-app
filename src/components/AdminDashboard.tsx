@@ -65,33 +65,38 @@ export default function AdminDashboard() {
     void fetchAppointments()
   }, [])
 
-  // Execute database rows state modifications (Fulfill Stakeholder Requirement workflow mutation)
   const updateStatus = async (id: number, newStatus: string): Promise<void> => {
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({ status: newStatus })
-        .eq('id', id)
+  try {
+    // Agregamos select() para obligar a Supabase a retornar la fila mutada bajo RLS
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ status: newStatus })
+      .eq('id', id)
+      .select();
 
-      if (error) throw error
-      
-      // Seamlessly map over local memory array references to sync visual VDOM tables instantly
-      setAppointments((prevAppts) =>
-        prevAppts.map((appt) =>
-          appt.id === id ? { ...appt, status: newStatus } : appt
-        )
+    if (error) throw error;
+
+    // Si el RLS bloqueó el update, data vendrá vacío []
+    if (!data || data.length === 0) {
+      throw new Error("Privileges verification failed. Database rejected the update request.");
+    }
+    
+    setAppointments((prevAppts) =>
+      prevAppts.map((appt) =>
+        appt.id === id ? { ...appt, status: newStatus } : appt
       )
-      alert(`Appointment #${id} successfully marked as ${newStatus}.`)
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error('Error updating status:', error.message)
-      } else {
-        console.error('An unexpected transmission anomaly blocked the row mutation execution.')
-      }
-      alert('Could not update the appointment status. Please check your network connection.')
+    );
+    alert(`Appointment #${id} successfully marked as ${newStatus}.`);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error('Error updating status:', error.message);
+      alert(`Could not update status: ${error.message}`);
+    } else {
+      console.error('An unexpected transmission anomaly occurred.');
+      alert('Could not update the appointment status.');
     }
   }
-
+};
   if (loading) {
     return (
       <div style={{ textAlign: 'center', marginTop: '50px' }}>
